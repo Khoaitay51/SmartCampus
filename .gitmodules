@@ -7,3 +7,12 @@
 [submodule "SmartCampus-edge"]
 	path = SmartCampus-edge
 	url = https://github.com/Khoaitay51/SmartCampus-edge.git
+[submodule "backend"]
+	path = backend
+	url = https://github.com/Khoaitay51/SmartCampus-backend.git
+[submodule "edge"]
+	path = edge
+	url = https://github.com/Khoaitay51/SmartCampus-edge.git
+[submodule "firmware"]
+	path = firmware
+	url = https://github.com/Khoaitay51/SmartCampus-firmware.git
