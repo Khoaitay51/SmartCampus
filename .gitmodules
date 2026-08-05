@@ -1,3 +1,6 @@
 [submodule "SmartCampus-firmware"]
 	path = SmartCampus-firmware
 	url = https://github.com/Khoaitay51/SmartCampus-firmware.git
+[submodule "SmartCampus-backend"]
+	path = SmartCampus-backend
+	url = https://github.com/Khoaitay51/SmartCampus-backend.git
