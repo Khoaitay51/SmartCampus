@@ -2,10 +2,6 @@
 
 Smart Campus BMS là một giải pháp quản lý tòa nhà thông minh AIoT toàn diện (end-to-end), được thiết kế để tự động hóa, giám sát và tối ưu hóa vận hành các phòng học và hành lang trong khuôn viên trường đại học. Hệ thống kết hợp giữa phần cứng nhúng ESP32, gateway tính toán biên (Edge Computing Gateway) hiệu năng cao, cơ sở dữ liệu chuỗi thời gian TimescaleDB và một pipeline trí tuệ nhân tạo (AI Pipeline) hỗ trợ đưa ra quyết định thông minh.
 
-> [!NOTE]  
-> Tài liệu này mô tả các yêu cầu chức năng (Functional Requirements) và cấu trúc của hệ thống Smart Campus BMS, trong đó các thành phần tương tác đã được tối ưu hóa trực tiếp qua hệ thống API Biên và cơ chế MQTT (được tinh giản và loại bỏ thành phần giao diện Digital Twin 3D/2D).
-
----
 
 ## 🗺️ Kiến trúc hệ thống (System Architecture)
 
@@ -176,56 +172,3 @@ AI Agent đăng ký (subscribe) trực tiếp các topic sự kiện từ MQTT B
     *   Tạo câu trả lời chi tiết và gửi phản hồi đến topic `campus/manager/chat/response`.
 
 ---
-
-## ⚡ Phân tích Tính khả thi về Độ trễ (Latency Feasibility Analysis)
-
-Một câu hỏi quan trọng trong thiết kế kiến trúc này là: **"Việc sử dụng MQTT Consumer trực tiếp để kích hoạt AI Agent có khả thi về mặt độ trễ (latency) hay không?"**
-
-### 1. Phân tích Các điểm nghẽn độ trễ (Latency Bottlenecks)
-
-Khi một tin nhắn MQTT kích hoạt AI Agent, tổng thời gian phản hồi (End-to-End Latency) bao gồm:
-$$\text{Latency}_{\text{E2E}} = T_{\text{MQTT\_Transit}} + T_{\text{Edge\_Filter}} + T_{\text{Context\_RAG}} + T_{\text{LLM\_Inference}} + T_{\text{Cmd\_Publish}}$$
-
-| Thành phần | Khoảng thời gian xử lý | Tính chất độ trễ | Mô tả |
-| :--- | :--- | :--- | :--- |
-| $T_{\text{MQTT\_Transit}}$ | $< 10 \text{ ms}$ | Cực thấp | Truyền tin nhắn qua Broker cục bộ. |
-| $T_{\text{Edge\_Filter}}$ | $< 5 \text{ ms}$ | Cực thấp | Sàng lọc dữ liệu bằng luật tĩnh trên Edge Gateway. |
-| $T_{\text{Context\_RAG}}$ | $20 - 50 \text{ ms}$ | Thấp | Truy vấn 15 phút telemetry hoặc Vector DB. |
-| $T_{\text{LLM\_Inference}}$ | $300 - 3000 \text{ ms}$ | **Rất cao (Điểm nghẽn)** | Thời gian suy luận của LLM (Qwen 1B chạy local hoặc Gemini Cloud API). |
-| $T_{\text{Cmd\_Publish}}$ | $< 10 \text{ ms}$ | Cực thấp | Gửi lệnh phản hồi từ AI Agent. |
-
-> [!WARNING]  
-> Thời gian suy luận của mô hình ngôn ngữ lớn (LLM Inference) là biến số lớn nhất ($300\text{ms}$ đến hơn $3\text{s}$). Do đó, việc thiết kế AI Agent trực tiếp chặn luồng MQTT (Synchronous Processing) sẽ gây ra hiện tượng nghẽn hàng đợi (message backlog), mất kết nối MQTT do timeout (keep-alive) và làm suy giảm hiệu năng toàn hệ thống.
-
-### 2. Giải pháp kiến trúc để đảm bảo tính khả thi
-
-Để mô hình MQTT Consumer cho AI Agent hoạt động trơn tru và khả thi, hệ thống áp dụng các nguyên tắc thiết kế sau:
-
-#### A. Phân tách luồng xử lý thời gian thực cứng (Hard Real-time) và phân tích (Analytical Loop)
-*   **Luồng điều khiển khẩn cấp (Hard Real-time):** Các hành động bảo vệ an toàn (ví dụ: phát hiện khói MQ2 lần 2 $\rightarrow$ hú còi buzzer khẩn cấp cục bộ và mở khóa cửa thoát hiểm) **hoàn toàn chạy bằng mã nhúng FSM cục bộ trên ESP32 hoặc luật tĩnh biên dịch tại Edge Gateway** (độ trễ $< 50\text{ms}$). Các hành động này **không** được chờ AI Agent quyết định.
-*   **Luồng trợ lý hỗ trợ (Soft Real-time):** Việc AI Agent phân tích sự cố để gợi ý điều khiển quạt, tổng hợp báo cáo hoặc trả lời chatbot có độ trễ cho phép từ $1 - 3$ giây. Ở mức này, độ trễ hoàn toàn được chấp nhận bởi người quản trị.
-
-#### B. Kiến trúc MQTT Consumer Bất đồng bộ (Asynchronous Worker Pattern)
-*   MQTT Consumer chạy trên một luồng non-blocking cực nhẹ (sử dụng thư viện `aiomqtt`).
-*   Khi có tin nhắn yêu cầu xử lý từ AI Agent, MQTT Consumer **không** thực thi LLM trực tiếp. Thay vào đó, nó đóng gói tin nhắn và đẩy vào hàng đợi tác vụ bất đồng bộ (Task Queue sử dụng Redis + Celery / ARQ).
-*   MQTT Consumer ngay lập tức hoàn thành việc nhận tin và sẵn sàng nhận bản tin tiếp theo. Các worker tiến trình nền (AI Workers) sẽ lấy nhiệm vụ từ hàng đợi, thực hiện RAG, gọi API LLM và publish kết quả bất đồng bộ.
-
-```
-[MQTT Broker] ---> (MQTT Consumer Daemon) 
-                            | (Đẩy tác vụ nhanh < 2ms)
-                            v
-                      [Redis Queue]
-                            | (Lấy tác vụ bất đồng bộ)
-                            v
-                     (AI Worker Pool) ---> [Gọi LLM / pgVector]
-                            | (Suy luận mất 1 - 3s)
-                            v
-[MQTT Broker] <--- (Publish Recommendation)
-```
-
-#### C. Bộ lọc sự kiện biên (Edge Event Filtering)
-*   AI Agent **không bao giờ** đăng ký dữ liệu telemetry thô gửi liên tục mỗi 2 giây từ các cảm biến. Việc đó do TimescaleDB Consumer đảm nhận.
-*   AI Agent chỉ đăng ký và xử lý các sự kiện đã được lọc và đóng gói thành "Event" bởi Edge Gateway (ví dụ: chỉ gửi sự kiện khi phát hiện sự thay đổi trạng thái FSM của phòng học hoặc khi có truy vấn trực tiếp từ người quản lý).
-
-### 📝 Kết luận
-Kiến trúc AI Agent hoạt động như một MQTT Consumer làm trợ lý quản lý **HOÀN TOÀN KHẢ THI** nếu áp dụng mô hình **xử lý bất đồng bộ (asynchronous task queue)** và **phân tách luồng quyết định khẩn cấp**. Sự kết hợp này mang lại khả năng mở rộng tốt, bảo vệ Broker khỏi bị quá tải, đồng thời cung cấp trải nghiệm trợ lý thông minh thời gian thực với độ trễ phản hồi tối ưu ($1 - 3$ giây).
