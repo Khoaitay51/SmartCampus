@@ -14,26 +14,6 @@ Hệ thống được tổ chức thành 3 phân hệ chính:
 2. **[edge](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge)**: Gateway biên chạy dịch vụ FastAPI, quản lý kết nối MQTT Broker, lưu trữ dữ liệu thời gian thực vào TimescaleDB, quản lý phiên học/điểm danh và đồng bộ hóa các lệnh điều khiển.
 3. **[AI](file:///Ubuntu/home/user_kma_chinh/SmartCampus/AI)**: Hệ thống xử lý ngôn ngữ tự nhiên và phân tích dữ liệu cảm biến thời gian thực sử dụng các mô hình ngôn ngữ lớn (LLM) và thuật toán phân tích chuỗi thời gian để đưa ra các khuyến nghị vận hành.
 
-```mermaid
-graph TD
-    subgraph "Firmware Node (ESP32)"
-        Sensors[DHT22, MQ2, RC522, CO2] --> ESP[ESP32 Core]
-        ESP --> Actuators[LED WS2812B, Servo, Buzzer, OLED]
-    end
-
-    subgraph Edge Gateway
-        MQTT[MQTT Broker] <--> FastAPI[FastAPI Service]
-        FastAPI <--> DB[(TimescaleDB)]
-        FastAPI <--> Redis[(Redis Cache)]
-    end
-
-    subgraph AI Pipeline
-        FastAPI <--> AI_Agent[AI Agent / Qwen 1B]
-        FastAPI <--> Chatbot[Gemini API Chatbot]
-    end
-
-    ESP <-->|MQTT Topics| MQTT
-```
 
 ---
 
