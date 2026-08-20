@@ -16,7 +16,7 @@ Hệ thống được tổ chức thành 3 phân hệ chính:
 
 ```mermaid
 graph TD
-    subgraph Firmware Node (ESP32)
+    subgraph "Firmware Node (ESP32)"
         Sensors[DHT22, MQ2, RC522, CO2] --> ESP[ESP32 Core]
         ESP --> Actuators[LED WS2812B, Servo, Buzzer, OLED]
     end
