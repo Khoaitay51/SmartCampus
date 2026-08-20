@@ -7,3 +7,6 @@
 [submodule "firmware"]
 	path = firmware
 	url = https://github.com/Khoaitay51/SmartCampus-firmware.git
+[submodule "AI"]
+	path = AI
+	url = https://github.com/Khoaitay51/SmartCampus-AI.git
