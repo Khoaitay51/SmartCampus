@@ -6,9 +6,9 @@ Smart Campus BMS là một giải pháp quản lý tòa nhà thông minh AIoT to
 ## 🗺️ Kiến trúc hệ thống (System Architecture)
 
 Hệ thống được tổ chức thành 3 phân hệ chính:
-1. **[firmware](file:///Ubuntu/home/user_kma_chinh/SmartCampus/firmware)**: Phân hệ nhúng trên vi điều khiển ESP32 chịu trách nhiệm thu thập telemetry từ cảm biến, điều khiển các cơ cấu chấp hành cục bộ và thực thi máy trạng thái phòng (Room FSM) thời gian thực.
-2. **[edge](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge)**: Gateway biên chạy dịch vụ FastAPI, quản lý kết nối MQTT Broker, lưu trữ dữ liệu thời gian thực vào TimescaleDB, quản lý phiên học/điểm danh và đồng bộ hóa các lệnh điều khiển.
-3. **[AI](file:///Ubuntu/home/user_kma_chinh/SmartCampus/AI)**: Hệ thống xử lý ngôn ngữ tự nhiên và phân tích dữ liệu cảm biến thời gian thực sử dụng các mô hình ngôn ngữ lớn (LLM) và thuật toán phân tích chuỗi thời gian để đưa ra các khuyến nghị vận hành.
+1. **[firmware](file:///home/user_kma_chinh/SmartCampus/firmware)**: Phân hệ nhúng trên vi điều khiển ESP32 chịu trách nhiệm thu thập telemetry từ cảm biến, điều khiển các cơ cấu chấp hành cục bộ (quạt 2 dây, khóa cửa, còi, OLED) và điểm danh/đăng ký thẻ RFID thời gian thực.
+2. **[edge](file:///home/user_kma_chinh/SmartCampus/edge)**: Phân hệ Edge Computing Gateway chạy cục bộ (FastAPI, TimescaleDB, MQTT Worker, FSM, xử lý logic phòng học, lưu trữ dữ liệu thời gian thực và quản lý quẹt thẻ/đăng ký thẻ lạ).
+3. **[AI + Backend](file:///home/user_kma_chinh/SmartCampus/AI%20+%20Backend)**: Phân hệ AI Agent & Central Backend Service kết hợp (LLM ReActXenAgent, RAG Tools với pgVector, Google Gemini, và dịch vụ Backend quản trị mở rộng với JWT/RBAC, REST API).
 
 
 ---

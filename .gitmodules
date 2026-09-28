@@ -1,6 +1,3 @@
-[submodule "backend"]
-	path = backend
-	url = https://github.com/Khoaitay51/SmartCampus-backend.git
 [submodule "edge"]
 	path = edge
 	url = https://github.com/Khoaitay51/SmartCampus-edge.git
@@ -8,5 +5,5 @@
 	path = firmware
 	url = https://github.com/Khoaitay51/SmartCampus-firmware.git
 [submodule "AI"]
-	path = AI
+	path = AI + Backend
 	url = https://github.com/Khoaitay51/SmartCampus-AI.git
