@@ -69,7 +69,19 @@ Hệ thống được tổ chức thành 3 phân hệ chính:
     *   Cho phép điều khiển thủ công qua lệnh MQTT bất kỳ lúc nào.
     *   Khi phòng ở trạng thái `EXAM` $\rightarrow$ Tự động chuyển sang `LOCKED`.
     *   Khi phòng ở trạng thái `EMERGENCY` $\rightarrow$ Tự động chuyển sang `UNLOCKED` ngay lập tức để thoát hiểm.
-*   **FR-AC-03 — Điều khiển quạt (Fan control):** Quạt có thể được bật/tắt dựa trên khuyến nghị từ hệ thống AI hoặc từ lệnh điều khiển thủ công của người dùng.
+*   **FR-AC-03 — Điều khiển quạt thông gió 2 dây (2-Wire Fan control):** Quạt DC 5V chỉ có 2 dây (VCC + GND), được điều khiển bật/tắt qua GPIO thông qua Transistor NPN (2N2222) hoặc MOSFET N-channel (IRLZ44N). Hệ thống hỗ trợ 2 chế độ phần cứng cấu hình tại compile-time:
+    *   `FAN_2WIRE_GPIO = 1` *(mặc định)*: Quạt 2 dây — Chỉ bật/tắt bằng GPIO, không có điều khiển tốc độ.
+    *   `FAN_2WIRE_GPIO = 0`: Quạt 3-4 dây — Điều khiển tốc độ (0-100%) bằng PWM qua LEDC Channel 4.
+    *   Sơ đồ đấu nối quạt 2 dây qua Transistor NPN:
+        ```
+        GPIO14 ---[1kΩ]--- Base(NPN 2N2222)
+                            |
+                        Emitter --- GND
+                            |
+                        Collector --- GND_Fan
+                                      |
+                                   VCC_Fan --- 5V (nguồn ngoài)
+        ```
 *   **FR-AC-04 — Còi cảnh báo (Buzzer):** Kích hoạt phát âm thanh trực tiếp tại node phần cứng:
     *   Sự cố khẩn cấp (`EMERGENCY`): Buzzer kêu liên tục ngay lập tức (không đợi phản hồi từ Cloud).
     *   Bắt đầu giờ thi (`EXAM` start): Phát 2 tiếng beep ngắn.
@@ -78,7 +90,17 @@ Hệ thống được tổ chức thành 3 phân hệ chính:
 *   **FR-AC-05 — Màn hình OLED hiển thị:** Hiển thị trực quan các thông tin: vai trò và họ tên của người quét thẻ RFID gần nhất, trạng thái các cảm biến môi trường (nhiệt độ/độ ẩm) và tình trạng kết nối MQTT.
 
 ### 5. Kiểm soát ra vào và Điểm danh RFID (RFID & Access Control)
-*   **FR-RF-01 — Đăng ký thẻ lạ (Unknown card registration):** Khi phát hiện thẻ chưa đăng ký quét tại hành lang (registration point), ESP32 gửi thông báo qua MQTT. FastAPI sẽ ghi nhận và tạo một yêu cầu đăng ký thẻ, cho phép Admin gán vai trò (Giảng viên, Sinh viên) và thông tin định danh qua API.
+*   **FR-RF-01 — Đăng ký thẻ lạ tại Node Hành lang (Unknown card registration at Corridor Node):**
+    *   **Node Hành lang (`ROLE_CORRIDOR_NODE = 3`)**: Bo mạch ESP32 chuyên dụng đặt tại sảnh/hành lang trang bị đầu đọc RFID RC522, màn hình OLED SSD1306, RGB LED và còi Buzzer.
+    *   **Luồng gửi yêu cầu đăng ký (Pending Request)**: Khi phát hiện thẻ chưa có trong hệ thống (`card_uid` chưa gắn `user_id`), ESP32 phát 2 tiếng beep ngắn, đèn LED chuyển sang **Vàng cam**, màn hình OLED hiển thị `UID: <card_uid>` kèm `ST: CHO DUYET (PENDING)`. Thiết bị gửi tin nhắn lên topic MQTT:
+        *   **Topic Request**: `smartcampus/v1/card/registration/request`
+        *   **Payload**: `{ "message_id": "...", "payload": { "mac_address": "XX:XX:XX:XX:XX:XX", "card_uid": "...", "room_id": "...", "status": "pending", "node_role": "corridor" } }`
+    *   **Lưu trữ Database**: Hệ thống tiếp nhận và lưu tự động vào bảng `card_registration_requests` (Model `CardRegistrationRequest`) với trạng thái `PENDING` để người quản trị (Admin) có thể kiểm duyệt và gán thẻ cho Sinh viên/Giảng viên.
+    *   **Phản hồi duyệt thẻ (Approval Response)**: Khi Admin duyệt hoặc từ chối, Gateway gửi gói tin phản hồi xuống topic:
+        *   **Topic Response**: `smartcampus/v1/card/registration/response/{mac_address}`
+        *   **Payload**: `{ "payload": { "card_uid": "...", "status": "approved" | "rejected" | "pending", "assigned_user_name": "...", "message": "..." } }`
+        *   Nếu `approved`: OLED hiển thị tên User + `ST: DA DUYET / OK`, LED đổi sang **Xanh lá**, còi kêu 1 tiếng beep ngắn.
+        *   Nếu `rejected`: OLED hiển thị `ST: TU CHOI`, LED đổi sang **Đỏ**, còi hú dài báo lỗi.
 *   **FR-RF-02 — Giảng viên điểm danh đầu giờ (Lecturer check-in):** Khi giảng viên quét thẻ hợp lệ tại cửa phòng học, trạng thái phòng chuyển sang `LECTURE`, đồng thời khởi tạo một phiên học mới (session) và bắt đầu mở cửa sổ điểm danh (attendance window).
 *   **FR-RF-03 — Sinh viên điểm danh (Student check-in):** Sinh viên đăng ký trong lớp học quét thẻ trong khung giờ điểm danh để ghi nhận sự hiện diện:
     *   Quét sau thời gian giới hạn (deadline) sẽ bị đánh dấu đi muộn (`late = true`).
@@ -126,6 +148,28 @@ Hệ thống được tổ chức thành 3 phân hệ chính:
     *   **RAG Poisoning (Đầu độc tri thức):** Đánh giá mức độ ảnh hưởng của dữ liệu telemetry giả mạo hoặc tóm tắt bị tiêm mã độc được lưu trong [edge/database.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/database.py) (`pgVector`) đến độ chính xác và tính an toàn của các khuyến nghị công cụ do AI Agent sinh ra.
     *   **Adversarial Telemetry Attack:** Đánh giá độ nhạy bén của thuật toán phát hiện và cô lập các chuỗi dữ liệu cảm biến bất thường giả lập liên tục nhằm đánh lừa AI Agent kích hoạt sai công cụ điều khiển.
 
+### 10. Đề xuất mở rộng cơ cấu chấp hành (Recommended Actuator Expansion)
+
+Dưới đây là danh sách các cơ cấu chấp hành **được khuyến nghị tích hợp** để nâng cấp hệ thống SmartCampus BMS trong tương lai, sắp xếp theo mức độ ưu tiên.
+
+| # | Cơ cấu chấp hành | Module gợi ý | Giao tiếp | Đấu nối ESP32 | Ứng dụng trong BMS |
+|:---:|:---|:---|:---:|:---|:---|
+| 1 | **Rơ-le đèn chiếu sáng** | Relay Module 5V (1/2/4 kênh) | GPIO | GPIO → IN Relay → Đèn AC 220V | Tự động bật/tắt đèn theo trạng thái FSM: `SAVING` → tắt, `LECTURE` → bật, `EMERGENCY` → nhấp nháy |
+| 2 | **Rơ-le điều hòa không khí** | Relay Module 5V + IR Blaster (VS1838B) | GPIO / IR | GPIO → Relay cắt nguồn, hoặc IR LED mô phỏng remote | Bật/tắt điều hòa theo nhiệt độ phòng. AI Agent gợi ý `adjust_ac_temperature(24°C)` khi temp > 30°C |
+| 3 | **Đèn báo cảnh báo xoay (Beacon)** | Đèn xoay LED 12V + Relay | GPIO → Relay | GPIO → Relay → Đèn 12V (nguồn ngoài) | Cảnh báo trực quan khi `EMERGENCY` / `SUSPECTED`, dễ nhận biết từ xa hơn buzzer |
+| 4 | **Màn hình LCD 20x4 / TFT** | LCD2004 (I2C) hoặc ILI9341 TFT (SPI) | I2C / SPI | SDA/SCL hoặc SPI bus | Hiển thị dashboard phòng: trạng thái FSM, nhiệt độ, CO2, số người, countdown điểm danh |
+| 5 | **Khóa điện từ (Electromagnetic Lock)** | Khóa điện từ 12V + Relay Module | GPIO → Relay | GPIO → Relay → Solenoid Lock 12V (nguồn ngoài) | Thay thế/bổ sung Servo SG90 cho cửa thực tế, chịu tải nặng hơn |
+| 6 | **Cảm biến cửa (Reed Switch)** | Reed Switch MC-38 | GPIO (INPUT_PULLUP) | Reed → GPIO + GND | Phát hiện cửa mở/đóng thực tế, cross-check với lệnh `set_door` |
+| 7 | **Quạt hút thông gió** | Quạt hút 12V + Relay | GPIO → Relay | GPIO → Relay → Quạt hút 12V | Kích hoạt khi CO2 > 1000ppm hoặc `air_quality` xấu, AI recommend `activate_exhaust_fan` |
+| 8 | **Bơm phun sương** | Bơm mini 5V + Relay/MOSFET | GPIO | GPIO → MOSFET → Bơm 5V | Duy trì độ ẩm tối ưu 40-60% trong phòng server/lab |
+| 9 | **Rèm cửa tự động** | Stepper Motor 28BYJ-48 + ULN2003 | GPIO (4 chân) | IN1-IN4 → GPIO | Đóng rèm khi `EXAM` (chống gian lận), mở rèm khi `SAVING` (tận dụng ánh sáng tự nhiên) |
+| 10 | **Loa thông báo (PA Speaker)** | DFPlayer Mini + Loa 8Ω 2W | UART (TX/RX) | TX → RX DFPlayer | Phát thông báo giọng nói: "Giờ thi bắt đầu", "Phát hiện khói — vui lòng di tản", "Điểm danh kết thúc" |
+
+> **Lưu ý kỹ thuật:**
+> - Các cơ cấu chấp hành dùng nguồn > 5V (12V, 220V AC) **bắt buộc** phải đi qua Relay Module hoặc MOSFET, không nối trực tiếp vào GPIO ESP32.
+> - Khi sử dụng Relay với tải AC 220V, cần tuân thủ quy tắc an toàn điện và cách ly quang (Optocoupler đã tích hợp sẵn trên hầu hết Relay Module).
+> - Mỗi cơ cấu chấp hành mới cần được đăng ký thêm vào `ALLOWED_ACTION_TOOLS` trong AI Agent và thêm tool definition tương ứng trong `edge/feature/tool/`.
+
 ---
 
 ## 💾 Cấu trúc dữ liệu và Models (Data Models)
@@ -140,11 +184,12 @@ Các mô hình dữ liệu trong hệ thống được quản lý tại thư m�
 | [room.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/room.py) | [Room](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/room.py#L5)<br>[RoomState](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/room.py#L12)<br>[RoomEvent](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/room.py#L22) | Quản lý danh mục phòng học, trạng thái vận hành hiện tại (FSM) và nhật ký các sự kiện chuyển trạng thái. |
 | [session.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/session.py) | [RoomSession](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/session.py#L4) | Theo dõi các buổi học thực tế được mở bởi giảng viên. |
 | [attendance_record.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/attendance_record.py) | [AttendanceRecord](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/attendance_record.py#L4) | Lưu vết kết quả điểm danh của sinh viên (Có mặt, Đi muộn, Vắng mặt). |
+| [card_registration.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/card_registration.py) | [CardRegistrationRequest](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/card_registration.py#L7) | Quản lý yêu cầu đăng ký thẻ RFID lạ tại hành lang với trạng thái PENDING/APPROVED/REJECTED. |
 | [peripheral.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/peripheral.py) | [Peripheral](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/peripheral.py#L4)<br>[PeripheralAction](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/peripheral.py#L10) | Quản lý các thiết bị ngoại vi kết nối (quạt, rơ-le, còi, khóa servo) và lịch sử gửi lệnh điều khiển. |
 | [telemetry/environment.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/telemetry/environment.py) | [Environment](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/telemetry/environment.py#L5) | Lưu trữ chuỗi thời gian (time-series) về nhiệt độ, độ ẩm và nồng độ CO2. |
 | [telemetry/occupancy.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/telemetry/occupancy.py) | [Occupancy](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/telemetry/occupancy.py#L5) | Lưu trữ chuỗi thời gian về mật độ người ra vào và hiện diện trong phòng. |
 | [telemetry/attendance_event.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/telemetry/attendance_event.py) | [AttendanceStatus](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/telemetry/attendance_event.py#L5)<br>[AttendanceEvent](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/telemetry/attendance_event.py#L12) | Ghi nhận chi tiết các lượt quét thẻ RFID tại các vị trí cửa phòng và hành lang. |
-| [__enum.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py) | [AttendanceEventType](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L3)<br>[UserRole](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L8)<br>[RoomType](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L14)<br>[RoomStatus](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L18)<br>[RoomModeEnum](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L22)<br>[SmokeState](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L31)<br>[DeviceStatusEnum](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L36)<br>[IRSignalType](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L40) | Định nghĩa toàn bộ các kiểu dữ liệu liệt kê (Enums) dùng chung trong hệ thống. |
+| [__enum.py](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py) | [AttendanceEventType](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L3)<br>[UserRole](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L8)<br>[RoomType](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L14)<br>[RoomStatus](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L18)<br>[RoomModeEnum](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L22)<br>[SmokeState](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L31)<br>[DeviceStatusEnum](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L36)<br>[IRSignalType](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L40)<br>[CardRegistrationStatus](file:///Ubuntu/home/user_kma_chinh/SmartCampus/edge/models/__enum.py#L58) | Định nghĩa toàn bộ các kiểu dữ liệu liệt kê (Enums) dùng chung trong hệ thống. |
 
 ---
 
