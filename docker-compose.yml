@@ -1,0 +1,30 @@
+# =============================================================================
+# SmartCampus Unified Docker Compose
+# Bao gồm toàn bộ 3 phân hệ:
+#   1. Edge Gateway & TimescaleDB & Mosquitto MQTT (cấu hình trong ./edge)
+#   2. AI Service & pgvector & Ollama LLM (cấu hình trong ./AI + Backend)
+#   3. Digital Twin 3D Frontend (Nginx SPA)
+# =============================================================================
+
+include:
+  - path: ./edge/docker-compose.yml
+    env_file: ./edge/.env
+  - path: ./AI + Backend/docker-compose.yml
+    env_file: ./AI + Backend/.env
+
+services:
+  # ---------------------------------------------------------------------------
+  # Frontend Digital Twin Web UI
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smartcampus-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - ai-agent
+    networks:
+      - smartcampus-net
