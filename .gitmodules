@@ -7,3 +7,6 @@
 [submodule "AI"]
 	path = AI + Backend
 	url = https://github.com/Khoaitay51/SmartCampus-AI.git
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/bh-dslog25/SmartCampus-frontend
