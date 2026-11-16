@@ -8,3 +8,6 @@ PAPER_MANUSCRIPT_*.md
 /IMPLEMENT_PLAN_SAFETY_TOGGLES.md
 /PLAN_SAFETY_TOGGLES_ENV.md
 
+# Local integration benchmark plan, fixtures and artifacts
+/benchmark_local/
+/experiment/__pycache__/

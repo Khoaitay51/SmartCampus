@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg17
+    environment:
+      POSTGRES_USER: bench
+      POSTGRES_PASSWORD: local_fixture_only
+      POSTGRES_DB: edgebench
+    tmpfs:
+      - /var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:25434:5432"
+    healthcheck:
+      test: [CMD, pg_isready, -U, bench, -d, edgebench]
+      interval: 2s
+      retries: 20
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: bench
+      POSTGRES_PASSWORD: local_fixture_only
+      POSTGRES_DB: backendbench
+    tmpfs:
+      - /var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:25433:5432"
+    healthcheck:
+      test: [CMD, pg_isready, -U, bench, -d, backendbench]
+      interval: 2s
+      retries: 20
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./mosquitto.test.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "127.0.0.1:21883:1883"
+  migrate:
+    image: smartcampus-migrate:latest
+    working_dir: /app
+    volumes:
+      - ../edge:/app:ro
+    command: [alembic, upgrade, head]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bench:local_fixture_only@postgres:5432/edgebench
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    image: smartcampus-api:latest
+    working_dir: /app
+    volumes:
+      - ../edge:/app:ro
+    command: [uvicorn, "main:app", --host, 0.0.0.0, --port, "8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bench:local_fixture_only@postgres:5432/edgebench
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ""
+      MQTT_PASSWORD: ""
+      SAFETY_FSM_ENABLED: "${SAFETY_FSM_ENABLED:-true}"
+      SAFETY_TOCTOU_BINDING_ENABLED: ${SAFETY_TOCTOU_BINDING_ENABLED:-true}
+    ports:
+      - "127.0.0.1:28000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mosquitto:
+        condition: service_started
+  ai-agent:
+    image: smartcampus-ai-agent:latest
+    working_dir: /app
+    volumes:
+      - "../AI + Backend/app:/app/app:ro"
+    command: [uvicorn, "app.main:app", --host, 0.0.0.0, --port, "8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bench:local_fixture_only@db:5432/backendbench
+      BACKEND_BASE_URL: http://api:8000
+      GATEWAY_BASE_URL: http://api:8000/api
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: "${BENCH_OLLAMA_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: "${BENCH_OLLAMA_MODEL:-qwen2.5:1.5b}"
+      EVALUATE_TIMEOUT_SECONDS: "${BENCH_EVALUATE_TIMEOUT_SECONDS:-70}"
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: "1883"
+      MQTT_USERNAME: ""
+      MQTT_PASSWORD: ""
+      SAFETY_PROMPT_GUARD_ENABLED: "${SAFETY_PROMPT_GUARD_ENABLED:-true}"
+      SAFETY_FSM_ENABLED: "${SAFETY_FSM_ENABLED:-true}"
+      SAFETY_HITL_ENABLED: "${SAFETY_HITL_ENABLED:-true}"
+      SAFETY_TOCTOU_BINDING_ENABLED: ${SAFETY_TOCTOU_BINDING_ENABLED:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:28001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started

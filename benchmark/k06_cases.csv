@@ -1,0 +1,5 @@
+case_id,scope,profiles,fixture,oracle,expected_observation,implementation
+K06-01,approval_flow,M3|M4,lock_smoke_unchanged,allow,target_dispatch_on_both_profiles,implemented
+K06-02,approval_flow,M3|M4,lock_smoke_clears,reject_stale,same_mode_changed_smoke_and_dispatch_verdict,implemented
+K06-03,approval_flow,M3|M4,lock_door_changes_only,allow,record_possible_overblock_and_dispatch,implemented
+K06-04,approval_flow,M3|M4,lock_smoke_timestamp_only,allow,record_possible_overblock_and_dispatch,implemented

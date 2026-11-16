@@ -1,0 +1,282 @@
+{
+  "fan_valid_unchanged": {
+    "initial": {
+      "room_mode": "LECTURE",
+      "door_state": "UNLOCKED",
+      "smoke_state": "NORMAL"
+    },
+    "command": "fan",
+    "reason": "Cooling demand remains valid in this test room.",
+    "before_approval": [],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "dispatch"
+    }
+  },
+  "smoke_episode_reappears_under_lock": {
+    "initial": {
+      "room_mode": "LOCK",
+      "door_state": "LOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "buzzer",
+    "reason": "Test warning for the original smoke episode.",
+    "before_approval": [
+      {
+        "smoke_state": "NORMAL"
+      },
+      {
+        "smoke_state": "SUSPECTED"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "smoke_new_proposal_after_recurrence": {
+    "initial": {
+      "room_mode": "LOCK",
+      "door_state": "LOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "buzzer",
+    "reason": "Test warning for the new smoke episode.",
+    "before_proposal": [
+      {
+        "smoke_state": "NORMAL"
+      },
+      {
+        "smoke_state": "SUSPECTED"
+      }
+    ],
+    "before_approval": [],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "dispatch"
+    }
+  },
+  "smoke_recovers_and_mode_restored": {
+    "initial": {
+      "room_mode": "SUSPECTED",
+      "door_state": "UNLOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "fan",
+    "reason": "Test fan action tied to the earlier suspected episode.",
+    "before_approval": [
+      {
+        "smoke_state": "NORMAL"
+      },
+      {
+        "room_mode": "LECTURE"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "simulated_episode_escalates": {
+    "initial": {
+      "room_mode": "SUSPECTED",
+      "door_state": "UNLOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "fan",
+    "reason": "Test fan action authorized only for the initially simulated mild episode.",
+    "before_approval": [
+      {
+        "room_mode": "EMERGENCY"
+      },
+      {
+        "smoke_state": "EMERGENCY"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "simulated_episode_stays_mild": {
+    "initial": {
+      "room_mode": "SUSPECTED",
+      "door_state": "UNLOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "fan",
+    "reason": "Test fan action authorized for the current mild episode.",
+    "before_approval": [],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "dispatch"
+    }
+  },
+  "lock_smoke_unchanged": {
+    "initial": {
+      "room_mode": "LOCK",
+      "door_state": "LOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "buzzer",
+    "reason": "Test warning for the current smoke episode.",
+    "before_approval": [],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "dispatch"
+    }
+  },
+  "lock_smoke_clears": {
+    "initial": {
+      "room_mode": "LOCK",
+      "door_state": "LOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "buzzer",
+    "reason": "Test warning for the original smoke episode.",
+    "before_approval": [
+      {
+        "smoke_state": "NORMAL"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "lock_door_changes_only": {
+    "initial": {
+      "room_mode": "LOCK",
+      "door_state": "LOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "buzzer",
+    "reason": "Test smoke warning independent of indoor door state.",
+    "before_approval": [
+      {
+        "door_state": "UNLOCKED"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "lock_smoke_timestamp_only": {
+    "initial": {
+      "room_mode": "LOCK",
+      "door_state": "LOCKED",
+      "smoke_state": "SUSPECTED"
+    },
+    "command": "buzzer",
+    "reason": "Test warning remains valid throughout one smoke episode.",
+    "before_approval": [
+      {
+        "smoke_state": "SUSPECTED"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "local_door_change_before_door_dependent_fan": {
+    "initial": {
+      "room_mode": "SAVING",
+      "door_state": "LOCKED",
+      "smoke_state": "NORMAL"
+    },
+    "command": "fan",
+    "reason": "Test ventilation valid only while the initial door state holds.",
+    "before_approval": [
+      {
+        "door_state": "UNLOCKED"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "local_door_change_before_door_independent_fan": {
+    "initial": {
+      "room_mode": "SAVING",
+      "door_state": "LOCKED",
+      "smoke_state": "NORMAL"
+    },
+    "command": "fan",
+    "reason": "Test cooling demand independent of door state.",
+    "before_approval": [
+      {
+        "door_state": "UNLOCKED"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "session_rollover_same_final_mode": {
+    "initial": {
+      "room_mode": "LECTURE",
+      "door_state": "UNLOCKED",
+      "smoke_state": "NORMAL"
+    },
+    "command": "fan",
+    "reason": "Test fan proposal tied to session A and invalid after the break.",
+    "before_approval": [
+      {
+        "room_mode": "SAVING"
+      },
+      {
+        "room_mode": "LECTURE"
+      }
+    ],
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "first_proposal_invalidates_second": {
+    "initial": {
+      "room_mode": "LECTURE",
+      "door_state": "UNLOCKED",
+      "smoke_state": "NORMAL"
+    },
+    "command": "fan",
+    "reason": "Test fan proposal valid only during the original lecture.",
+    "approve_first": "mode_saving",
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "stale"
+    }
+  },
+  "compatible_light_and_fan": {
+    "initial": {
+      "room_mode": "LECTURE",
+      "door_state": "UNLOCKED",
+      "smoke_state": "NORMAL"
+    },
+    "command": "fan",
+    "reason": "Test cooling proposal independent of the light.",
+    "approve_first": "light",
+    "predicted": {
+      "M3": "dispatch",
+      "M4": "dispatch"
+    }
+  },
+  "repeat_authorized_approval_sequential": {
+    "initial": {
+      "room_mode": "LECTURE",
+      "door_state": "UNLOCKED",
+      "smoke_state": "NORMAL"
+    },
+    "command": "fan",
+    "reason": "Test cooling proposal approved once then reviewed again through the normal API.",
+    "approve_first": "same_proposal",
+    "predicted": {
+      "M3": "duplicate_blocked",
+      "M4": "duplicate_blocked"
+    }
+  }
+}

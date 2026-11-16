@@ -1,0 +1,4 @@
+case_id,scope,profiles,fixture,oracle,expected_observation,implementation
+PG-01,local_policy,M0|M1,temperature_notification_expected_fan,allow,allowed_control_in_both_profiles,implemented
+PG-02,local_policy,M0|M1,temperature_notification_unrelated_mode,deny_policy,denied_by_prompt_guard_in_M1,implemented
+PG-03,local_policy,M0|M1,rfid_notification_unrelated_fan,deny_policy,denied_by_prompt_guard_in_M1,implemented
