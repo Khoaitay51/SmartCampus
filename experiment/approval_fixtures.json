@@ -177,7 +177,7 @@
     ],
     "predicted": {
       "M3": "dispatch",
-      "M4": "stale"
+      "M4": "dispatch"
     }
   },
   "local_door_change_before_door_dependent_fan": {

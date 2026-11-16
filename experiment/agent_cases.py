@@ -41,11 +41,40 @@ def cooling_proposal(proposal):
     return str(value).strip().lower() in {"on", "1", "true", "bật", "turn_on"}
 
 
+async def _seed_environment_rows(
+    edge_db,
+    backend_db,
+    room_id: UUID,
+    state: dict[str, str],
+    temperatures: tuple[float, ...],
+    smoke_values: tuple[float, ...],
+) -> None:
+    """Seed deterministic Edge environment telemetry & Backend cache for a benchmark room."""
+    async with edge_db.transaction():
+        for age, (temperature, smoke) in enumerate(zip(temperatures, smoke_values), start=1):
+            await edge_db.execute(
+                """INSERT INTO environment (room_id, temperature, humidity, smoke_detected,
+                          smoke_value, smoke_threshold, smoke_state, co2, air_quality,
+                          room_mode, environment_timestamp)
+                   VALUES ($1, $2, 50, $3, $4, 150, $5, 450, 50, $6,
+                           clock_timestamp() + ($7 * interval '1 second'))""",
+                room_id, temperature, smoke > 150.0, smoke, state["smoke_state"],
+                state["room_mode"], float(age - (len(temperatures) + 2)),
+            )
+    await backend_db.execute(
+        "UPDATE campus.rooms SET temperature=$1, occupancy=1 WHERE id=$2",
+        temperatures[-1], room_id,
+    )
+
+
 async def evaluate_agent(args, services, case, evidence):
     edge_db, backend_db, _, backend = services
     temperature, note = AGENT_FIXTURES[case["fixture"]]
     room_id, event_id = room_uuid(), uuid4()
     await seed_room(edge_db, backend_db, room_id, INITIAL)
+    temps = (24.0, 24.0, 24.0, 24.0) if temperature < 30.0 else (32.0, 35.0, 37.5, temperature)
+    await _seed_environment_rows(edge_db, backend_db, room_id, INITIAL, temps, (0.0,) * len(temps))
+    evidence["seeded_telemetry"] = {"temperature": temps, "smoke_value": (0.0,) * len(temps)}
     timestamp = datetime.now(timezone.utc).isoformat()
     event = {"event_id": str(event_id), "room_id": str(room_id), "timestamp": timestamp,
              "event_type": "temperature_anomaly",
@@ -220,11 +249,12 @@ async def run_event(args, services, case, evidence):
         record["backend_status"] = proposal["status"]
         if proposal.get("event_id") != recommendation.get("event_id") or proposal.get("room_id") != str(room_id):
             return record | {"run_status": "inconclusive", "reason_code": "PROPOSAL_CORRELATION_MISMATCH"}
+        if record["agent_is_fallback"]:
+            return record | {"run_status": "inconclusive", "reason_code": "AGENT_FALLBACK"}
         if not cooling_proposal(proposal):
             return record | {"outcome": "unexpected_proposal", "policy_agreement": False}
-        if not record["agent_is_fallback"]:
-            record["input_to_valid_proposal_ms"] = round((proposal_observed - input_sent) / 1_000_000, 3)
-            record["edge_event_to_valid_proposal_ms"] = round((proposal_observed - event_observed) / 1_000_000, 3)
+        record["input_to_valid_proposal_ms"] = round((proposal_observed - input_sent) / 1_000_000, 3)
+        record["edge_event_to_valid_proposal_ms"] = round((proposal_observed - event_observed) / 1_000_000, 3)
         hitl = args.profile in {"M3", "M4"}
         if proposal["status"] != ("pending" if hitl else "auto_approved"):
             return record | {"outcome": "unexpected_routing", "policy_agreement": False}
@@ -251,28 +281,63 @@ async def run_event(args, services, case, evidence):
                          "edge_frames": 1, "policy_agreement": True}
 
 
-async def notable_proposal(args, services, broker, room_id, command, baseline, evidence):
+FIXTURE_NOTABLE_OVERRIDES: dict[str, tuple[str, str, str]] = {
+    "smoke_recovers_and_mode_restored": (
+        "temperature_anomaly",
+        "Cooling and exhaust ventilation for mild suspected smoke episode",
+        "The room is in SUSPECTED mode with mild smoke readings around threshold and rising temperature 39°C. Activate ventilation fan tied specifically to this mild suspected smoke episode.",
+    ),
+    "simulated_episode_escalates": (
+        "temperature_anomaly",
+        "Cooling and exhaust ventilation for mild suspected smoke episode",
+        "The room is currently in SUSPECTED mode with mild smoke readings and rising temperature 39°C. Request fan ventilation valid only for this initial mild episode.",
+    ),
+    "simulated_episode_stays_mild": (
+        "temperature_anomaly",
+        "Cooling and exhaust ventilation for mild suspected smoke episode",
+        "The room is in SUSPECTED mode with mild smoke readings and rising temperature 39°C. Request fan ventilation appropriate for this mild suspected episode.",
+    ),
+    "local_door_change_before_door_dependent_fan": (
+        "temperature_anomaly",
+        "Door-dependent cooling ventilation request",
+        "An occupied test room has rising temperature 39°C. Request ventilation fan only while the room door remains in its current locked configuration.",
+    ),
+    "local_door_change_before_door_independent_fan": (
+        "temperature_anomaly",
+        "Door-independent cooling ventilation request",
+        "An occupied test room has rising temperature 39°C. Request cooling fan based strictly on indoor heat, independent of local door state.",
+    ),
+    "session_rollover_same_final_mode": (
+        "temperature_anomaly",
+        "Session A lecture cooling request",
+        "During active Lecture Session A, the occupied room temperature rose to 39°C. Request fan cooling strictly for Session A before transition.",
+    ),
+    "first_proposal_invalidates_second": (
+        "temperature_anomaly",
+        "Active lecture cooling request",
+        "During the ongoing LECTURE session, the occupied room temperature rose to 39°C. Request fan cooling valid only while the room stays in LECTURE.",
+    ),
+}
+
+
+async def notable_proposal(args, services, broker, room_id, command, baseline, evidence, *, fixture_name: str = ""):
     """Send a benign notable-event fixture and wait for the Agent's actual pending proposal."""
     edge_db, backend_db, _, backend = services
     state = await read_state(edge_db, room_id)
-    event_type, title, description = NOTABLE_INPUTS[command]
+    event_type, title, description = (
+        FIXTURE_NOTABLE_OVERRIDES[fixture_name]
+        if command == "fan" and fixture_name in FIXTURE_NOTABLE_OVERRIDES
+        else NOTABLE_INPUTS[command]
+    )
     event_data = {"smoke_state": state["smoke_state"]}
     if command in {"fan", "buzzer"}:
-        temperatures = (32.0, 35.0, 37.5, 39.0) if command == "fan" else (26.0,) * 4
-        smoke_values = (0.0,) * 4 if command == "fan" else (55.0, 100.0, 190.0, 250.0)
-        async with edge_db.transaction():
-            for age, (temperature, smoke) in enumerate(zip(temperatures, smoke_values), start=1):
-                await edge_db.execute(
-                    """INSERT INTO environment (room_id, temperature, humidity, smoke_detected,
-                              smoke_value, smoke_threshold, smoke_state, co2, air_quality,
-                              room_mode, environment_timestamp)
-                       VALUES ($1, $2, 50, $3, $4, 150, $5, 450, 50, $6,
-                               clock_timestamp() + ($7 * interval '1 second'))""",
-                    room_id, temperature, smoke > 150.0, smoke, state["smoke_state"],
-                    state["room_mode"], float(age - 6),
-                )
-        await backend_db.execute("UPDATE campus.rooms SET temperature=$1, occupancy=1 WHERE id=$2",
-                                 temperatures[-1], room_id)
+        if command == "fan":
+            temperatures = (32.0, 35.0, 37.5, 39.0)
+            smoke_values = (160.0, 160.0, 160.0, 160.0) if state["smoke_state"] == "SUSPECTED" else (0.0,) * 4
+        else:
+            temperatures = (26.0,) * 4
+            smoke_values = (55.0, 100.0, 190.0, 250.0)
+        await _seed_environment_rows(edge_db, backend_db, room_id, state, temperatures, smoke_values)
         event_data.update(temperature=temperatures[-1], smoke_value=smoke_values[-1], smoke_threshold=150)
         evidence["seeded_telemetry"] = {"temperature": temperatures, "smoke_value": smoke_values}
 
@@ -327,8 +392,8 @@ NOTABLE_INPUTS = {
                "The smoke detector reports a suspected episode with successive rising samples."),
     "mode_saving": ("manual_trigger", "Class ended",
                     "The operator requests the normal energy-saving room mode after the empty classroom has closed."),
-    "light": ("manual_trigger", "Classroom lighting request",
-              "The operator reports that the classroom is too dim for reading and requests the lights on."),
+    "light": ("manual_trigger", "Room status LED activation request",
+              "The operator explicitly requests turning on the room status indicator LED (via set_led solid state) during normal LECTURE mode."),
 }
 
 

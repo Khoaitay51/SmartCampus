@@ -87,6 +87,7 @@ services:
       SAFETY_FSM_ENABLED: "${SAFETY_FSM_ENABLED:-true}"
       SAFETY_HITL_ENABLED: "${SAFETY_HITL_ENABLED:-true}"
       SAFETY_TOCTOU_BINDING_ENABLED: ${SAFETY_TOCTOU_BINDING_ENABLED:-true}
+      BENCHMARK_DISABLE_LTM: "true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

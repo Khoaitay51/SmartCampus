@@ -66,6 +66,7 @@ class Scenario:
     reason: str
     predicted_outcome: str
     approve_first: str | None
+    fixture_name: str = ""
 
 
 class SetupError(RuntimeError):
@@ -140,7 +141,7 @@ def parse_approval_cases(rows, fixtures, profile, selected, *, scope):
             case_id, oracle, initial, command,
             fixture_steps(fixture.get("before_proposal", []), name),
             fixture_steps(fixture.get("before_approval", []), name),
-            reason, expected, approve_first,
+            reason, expected, approve_first, fixture_name=name,
         ))
     return scenarios
 
@@ -233,9 +234,16 @@ async def apply_state_change(db, room_id: UUID, field: str, value: str, before: 
 async def apply_steps(db, edge, room_id: UUID, steps: tuple[tuple[str, str], ...],
                       state: dict, snapshot: dict, timeout: float, evidence: list) -> tuple[dict, dict]:
     for field, value in steps:
+        value_changed = state[field] != value
         state = await apply_state_change(db, room_id, field, value, state)
-        snapshot = await wait_for_snapshot(edge, room_id, state["room_mode"],
-                                           previous_version=snapshot["state_version"], timeout=timeout)
+        if value_changed:
+            snapshot = await wait_for_snapshot(edge, room_id, state["room_mode"],
+                                               previous_version=snapshot["state_version"], timeout=timeout)
+        else:
+            # Redundant same-value writes must NOT perturb composite state_version.
+            snapshot = await get_snapshot(edge, room_id)
+            if snapshot.get("room_id") != str(room_id) or snapshot.get("mode") != state["room_mode"]:
+                raise SetupError(f"Unexpected snapshot after same-value {field} write")
         evidence.append({"field": field, "value": value, "db_state": state, "snapshot": snapshot})
     return state, snapshot
 
@@ -422,12 +430,14 @@ async def run_case(args, services, scenario: Scenario, repeat: int, *, proposal_
             )
             evidence.update(baseline=baseline, db_before=before)
 
-            async def obtain_proposal(command, reason):
+            async def obtain_proposal(command, reason, fixture_name=""):
                 if proposal_source is None:
                     return await create_proposal(backend, room_id, command, reason, baseline), {}
                 attempt = {}
                 evidence.setdefault("agent_proposal_attempts", []).append(attempt)
-                return await proposal_source(args, services, broker, room_id, command, baseline, attempt)
+                return await proposal_source(
+                    args, services, broker, room_id, command, baseline, attempt, fixture_name=fixture_name,
+                )
 
             first_command = scenario.approve_first
             duplicate = first_command == "same_proposal"
@@ -436,7 +446,9 @@ async def run_case(args, services, scenario: Scenario, repeat: int, *, proposal_
                 first_proposal, first_metrics = await obtain_proposal(first_command, "Valid first test proposal")
                 evidence["first_approval"] = {"proposal": first_proposal, **first_metrics}
 
-            proposal, metrics = await obtain_proposal(scenario.command, scenario.reason)
+            proposal, metrics = await obtain_proposal(
+                scenario.command, scenario.reason, fixture_name=scenario.fixture_name,
+            )
             evidence["proposal"] = proposal
             record.update(proposal_id=proposal["id"], **metrics)
             after, at_approval = before, baseline
