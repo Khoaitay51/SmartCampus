@@ -23,7 +23,8 @@ from agent_cases import AGENT_FIXTURES, EVENT_FIXTURES, evaluate_agent, notable_
 from export_results import ENTRY_POINTS, RAW_FIELDS, export, read_manifest, split_simple_results
 from guard_probe import FSM_FIXTURES, NOTIFICATION_POLICY_FIXTURES, PAYLOAD_FIXTURES, STATE_FIXTURES
 from run_approval import (
-    FLAGS, PROFILE_FLAGS, ROOT, SetupError, local_url, parse_approval_cases, run_case, save_evidence, verify_compose,
+    FLAGS, PROFILE_FLAGS, ROOT, SetupError, local_url, parse_approval_cases, run_asyncio, run_case, save_evidence,
+    verify_compose,
 )
 
 OFFLINE_SERVICES = {
@@ -292,7 +293,7 @@ def main():
     if args.output is None:
         args.output = ROOT / "benchmark_local/runs" / f"full-{uuid4().hex}"
     try:
-        return asyncio.run(run(args))
+        return run_asyncio(run(args))
     except (SetupError, KeyError, ValueError, OSError, subprocess.SubprocessError,
             httpx.HTTPError, asyncpg.PostgresError) as error:
         parser.exit(2, f"Benchmark preflight/export failed: {type(error).__name__}: {error if isinstance(error, SetupError) else ''}\n")

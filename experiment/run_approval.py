@@ -8,6 +8,7 @@ import json
 import math
 import os
 import subprocess
+import sys
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -568,6 +569,15 @@ async def run(args, cases: list[Scenario]) -> int:
     return int(failed)
 
 
+def run_asyncio(coro):
+    """Run an async coroutine using SelectorEventLoop on Windows for aiomqtt compatibility."""
+    if sys.platform == "win32":
+        if sys.version_info >= (3, 12):
+            return asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    return asyncio.run(coro)
+
+
 def main(*, default_manifest: Path = ROOT / "experiment/approval_cases.csv",
          default_cases: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -600,7 +610,7 @@ def main(*, default_manifest: Path = ROOT / "experiment/approval_cases.csv",
     try:
         cases = read_cases(args.manifest, args.fixtures, args.profile, args.cases or default_cases)
         verify_compose(args)
-        return asyncio.run(run(args, cases))
+        return run_asyncio(run(args, cases))
     except SetupError as exc:
         parser.exit(2, f"Preflight failed: {exc}\n")
     except (OSError, subprocess.TimeoutExpired, asyncpg.PostgresError, httpx.HTTPError, ValueError) as exc:
