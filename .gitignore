@@ -11,3 +11,4 @@ PAPER_MANUSCRIPT_*.md
 # Local integration benchmark plan, fixtures and artifacts
 /benchmark_local/
 /experiment/__pycache__/
+/reviewing/

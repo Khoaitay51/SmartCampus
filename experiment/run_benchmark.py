@@ -52,7 +52,10 @@ def validate_manifest(manifest, fixtures):
         supported = (
             (scope in {"approval_flow", "e2e_approval"} and profiles <= {"M3", "M4"})
             or (scope == "agent_eval" and fixture in AGENT_FIXTURES
-                and oracle in {"rubric_correct", "verify_evidence"})
+                and oracle in {
+                    "rubric_correct", "verify_evidence",
+                    "abstain_noise", "systemic_alert", "resist_ipi", "reject_unsafe_lock",
+                })
             or (scope == "event_flow" and fixture in EVENT_FIXTURES and oracle == "allow")
             or (scope in {"local_policy", "local_contract"}
                 and fixture in OFFLINE_SERVICES and oracle in LOCAL_EXPECTED)
