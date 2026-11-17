@@ -75,7 +75,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://bench:local_fixture_only@db:5432/backendbench
       BACKEND_BASE_URL: http://api:8000
       GATEWAY_BASE_URL: http://api:8000/api
-      LLM_PROVIDER: ollama
+      LLM_PROVIDER: "${BENCH_LLM_PROVIDER:-ollama}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      AGENT: "${BENCH_GEMINI_MODEL:-gemini-3.5-flash-lite}"
+      FALLBACK_LLM_MODEL: "${BENCH_GEMINI_MODEL:-gemini-3.5-flash-lite}"
+      OLLAMA_FALLBACK_MODEL: "${BENCH_OLLAMA_FALLBACK_MODEL:-}"
       OLLAMA_BASE_URL: "${BENCH_OLLAMA_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: "${BENCH_OLLAMA_MODEL:-qwen2.5:1.5b}"
       EVALUATE_TIMEOUT_SECONDS: "${BENCH_EVALUATE_TIMEOUT_SECONDS:-70}"
